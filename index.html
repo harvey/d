@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Message Reaction Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+            border: 2px dashed #ddd;
+        }
+        .upload-section input {
+            margin: 10px 0;
+        }
+        .upload-section button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .upload-section button:hover {
+            background-color: #45a049;
+        }
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            display: none; /* Hidden until data is loaded */
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            min-width: 200px;
+        }
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .chart-row {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 40px;
+            display: none; /* Hidden until data is loaded */
+        }
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .chart-box {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+            height: 500px; /* Fixed height for consistency */
+        }
+        .full-width {
+            width: 100%;
+        }
+        canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .data-summary {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            display: none; /* Hidden until data is loaded */
+        }
+        .summary-stats {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        .stat-box {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            text-align: center;
+            min-width: 150px;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+        .data-info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f4fd;
+            border-radius: 5px;
+            display: none;
+        }
+        .chart-controls {
+            display: flex;
+            gap: 10px;
+        }
+        .chart-controls button {
+            background-color: #f1f1f1;
+            border: 1px solid #ddd;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .chart-controls button:hover {
+            background-color: #e1e1e1;
+        }
+        @media (max-width: 768px) {
+            .chart-box {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Message Reaction Analysis Dashboard</h1>
+        
+        <div class="upload-section">
+            <h3>Upload Your Excel File</h3>
+            <p>Your Excel file should have:</p>
+            <ul style="text-align: left; display: inline-block;">
+                <li>Reaction data in columns A-C (Time, Senior, Message)</li>
+                <li>Message time data in column E (TimeOfMessage)</li>
+            </ul>
+            <br>
+            <input type="file" id="fileInput" accept=".xlsx, .xls">
+            <br>
+            <button id="uploadBtn">Analyze Data</button>
+        </div>
+        
+        <div class="data-info" id="dataInfo">
+            <h3>Data Loaded Successfully!</h3>
+            <p id="reactionCount">Reactions: 0</p>
+            <p id="messageCount">Messages: 0</p>
+        </div>
+        
+        <div class="filters" id="filters">
+            <div class="filter-group">
+                <label for="startDate">Start Date:</label>
+                <input type="date" id="startDate">
+            </div>
+            <div class="filter-group">
+                <label for="endDate">End Date:</label>
+                <input type="date" id="endDate">
+            </div>
+            <div class="filter-group">
+                <label for="seniorFilter">Filter by Senior:</label>
+                <select id="seniorFilter">
+                    <option value="all">All Seniors</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="timeRange">Time Range:</label>
+                <select id="timeRange">
+                    <option value="all">All Time</option>
+                    <option value="last7">Last 7 Days</option>
+                    <option value="last30">Last 30 Days</option>
+                    <option value="last90">Last 90 Days</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="chart-row" id="seniorChartRow">
+            <div class="chart-header">
+                <h2>Top Reacting Seniors</h2>
+                <div class="chart-controls">
+                    <button id="seniorChartType">Switch to Bar Chart</button>
+                </div>
+            </div>
+            <div class="chart-box full-width">
+                <canvas id="seniorChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-row" id="comparisonChartRow">
+            <div class="chart-header">
+                <h2>Messages vs Reactions by Day</h2>
+                <div class="chart-controls">
+                    <button id="comparisonChartType">Switch to Line Chart</button>
+                </div>
+            </div>
+            <div class="chart-box full-width">
+                <canvas id="comparisonChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="data-summary" id="dataSummary">
+            <h3>Data Summary</h3>
+            <div class="summary-stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="totalReactions">0</div>
+                    <div class="stat-label">Total Reactions</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="totalMessages">0</div>
+                    <div class="stat-label">Total Messages</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="uniqueSeniors">0</div>
+                    <div class="stat-label">Unique Seniors</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="avgReactionsPerDay">0</div>
+                    <div class="stat-label">Avg Reactions/Day</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables to store the data
+        let reactions = [];
+        let messages = [];
+        let seniorChart, comparisonChart;
+
+        // Initialize charts
+        const initCharts = () => {
+            const seniorCtx = document.getElementById('seniorChart').getContext('2d');
+            const comparisonCtx = document.getElementById('comparisonChart').getContext('2d');
+            
+            // Senior chart (pie chart)
+            seniorChart = new Chart(seniorCtx, {
+                type: 'pie',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [
+                            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', 
+                            '#9966FF', '#FF9F40', '#8AE65C', '#C9CBCF',
+                            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Reactions by Senior',
+                            font: {
+                                size: 18
+                            }
+                        },
+                        tooltip: {
+                            bodyFont: {
+                                size: 14
+                            },
+                            titleFont: {
+                                size: 14
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Comparison chart (bar chart)
+            comparisonChart = new Chart(comparisonCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Messages Sent',
+                            data: [],
+                            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Messages Reacted',
+                            data: [],
+                            backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date',
+                                font: {
+                                    size: 14
+                                }
+                            },
+                            ticks: {
+                                maxTicksLimit: 10,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Count',
+                                font: {
+                                    size: 14
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Messages vs Reactions by Day',
+                            font: {
+                                size: 18
+                            }
+                        },
+                        tooltip: {
+                            bodyFont: {
+                                size: 14
+                            },
+                            titleFont: {
+                                size: 14
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Add chart type toggle functionality
+            document.getElementById('seniorChartType').addEventListener('click', () => {
+                if (seniorChart.config.type === 'pie') {
+                    seniorChart.config.type = 'bar';
+                    seniorChart.options.indexAxis = 'y';
+                    document.getElementById('seniorChartType').textContent = 'Switch to Pie Chart';
+                } else {
+                    seniorChart.config.type = 'pie';
+                    document.getElementById('seniorChartType').textContent = 'Switch to Bar Chart';
+                }
+                seniorChart.update();
+            });
+
+            document.getElementById('comparisonChartType').addEventListener('click', () => {
+                if (comparisonChart.config.type === 'bar') {
+                    comparisonChart.config.type = 'line';
+                    document.getElementById('comparisonChartType').textContent = 'Switch to Bar Chart';
+                } else {
+                    comparisonChart.config.type = 'bar';
+                    document.getElementById('comparisonChartType').textContent = 'Switch to Line Chart';
+                }
+                comparisonChart.update();
+            });
+        };
+
+        // Process and analyze the data
+        const processData = (reactions, messages, filters) => {
+            // Apply date filters
+            const startDate = filters.startDate ? new Date(filters.startDate) : null;
+            const endDate = filters.endDate ? new Date(filters.endDate) : null;
+            
+            let filteredReactions = reactions.filter(r => {
+                const reactionDate = new Date(r.time);
+                if (startDate && reactionDate < startDate) return false;
+                if (endDate && reactionDate > endDate) return false;
+                if (filters.senior !== 'all' && r.senior !== filters.senior) return false;
+                return true;
+            });
+            
+            let filteredMessages = messages.filter(m => {
+                const messageDate = new Date(m.time);
+                if (startDate && messageDate < startDate) return false;
+                if (endDate && messageDate > endDate) return false;
+                return true;
+            });
+            
+            // Apply time range filters
+            if (filters.timeRange !== 'all') {
+                const now = new Date();
+                let cutoffDate = new Date();
+                
+                switch(filters.timeRange) {
+                    case 'last7':
+                        cutoffDate.setDate(now.getDate() - 7);
+                        break;
+                    case 'last30':
+                        cutoffDate.setDate(now.getDate() - 30);
+                        break;
+                    case 'last90':
+                        cutoffDate.setDate(now.getDate() - 90);
+                        break;
+                }
+                
+                filteredReactions = filteredReactions.filter(r => new Date(r.time) >= cutoffDate);
+                filteredMessages = filteredMessages.filter(m => new Date(m.time) >= cutoffDate);
+            }
+            
+            // Count reactions by senior
+            const seniorCounts = {};
+            filteredReactions.forEach(r => {
+                seniorCounts[r.senior] = (seniorCounts[r.senior] || 0) + 1;
+            });
+            
+            // Group by day for comparison chart
+            const dailyData = {};
+            
+            // Process reactions by day
+            filteredReactions.forEach(r => {
+                const date = new Date(r.time).toISOString().split('T')[0];
+                if (!dailyData[date]) {
+                    dailyData[date] = { reactions: 0, messages: 0 };
+                }
+                dailyData[date].reactions++;
+            });
+            
+            // Process messages by day
+            filteredMessages.forEach(m => {
+                const date = new Date(m.time).toISOString().split('T')[0];
+                if (!dailyData[date]) {
+                    dailyData[date] = { reactions: 0, messages: 0 };
+                }
+                dailyData[date].messages++;
+            });
+            
+            // Convert to arrays for charting
+            const sortedDates = Object.keys(dailyData).sort();
+            const dailyReactions = sortedDates.map(date => dailyData[date].reactions);
+            const dailyMessages = sortedDates.map(date => dailyData[date].messages);
+            
+            return {
+                seniorCounts,
+                dailyData: {
+                    dates: sortedDates,
+                    reactions: dailyReactions,
+                    messages: dailyMessages
+                },
+                summary: {
+                    totalReactions: filteredReactions.length,
+                    totalMessages: filteredMessages.length,
+                    uniqueSeniors: Object.keys(seniorCounts).length,
+                    avgReactionsPerDay: filteredReactions.length / (sortedDates.length || 1)
+                }
+            };
+        };
+
+        // Update charts with new data
+        const updateCharts = (data) => {
+            // Update senior chart
+            const seniorLabels = Object.keys(data.seniorCounts);
+            const seniorData = Object.values(data.seniorCounts);
+            
+            seniorChart.data.labels = seniorLabels;
+            seniorChart.data.datasets[0].data = seniorData;
+            seniorChart.update();
+            
+            // Update comparison chart
+            comparisonChart.data.labels = data.dailyData.dates;
+            comparisonChart.data.datasets[0].data = data.dailyData.messages;
+            comparisonChart.data.datasets[1].data = data.dailyData.reactions;
+            comparisonChart.update();
+            
+            // Update summary statistics
+            document.getElementById('totalReactions').textContent = data.summary.totalReactions;
+            document.getElementById('totalMessages').textContent = data.summary.totalMessages;
+            document.getElementById('uniqueSeniors').textContent = data.summary.uniqueSeniors;
+            document.getElementById('avgReactionsPerDay').textContent = data.summary.avgReactionsPerDay.toFixed(1);
+        };
+
+        // Parse the Excel file
+        const parseExcel = (data) => {
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // Convert to JSON
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            
+            // Extract reactions data (columns A-C)
+            reactions = [];
+            for (let i = 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                if (row.length >= 3 && row[0] && row[1] && row[2]) {
+                    reactions.push({
+                        time: row[0],
+                        senior: row[1],
+                        message: row[2]
+                    });
+                }
+            }
+            
+            // Extract messages data (column E)
+            messages = [];
+            for (let i = 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                if (row.length >= 5 && row[4]) {
+                    messages.push({
+                        time: row[4]
+                    });
+                }
+            }
+            
+            // Show data info
+            document.getElementById('reactionCount').textContent = `Reactions: ${reactions.length}`;
+            document.getElementById('messageCount').textContent = `Messages: ${messages.length}`;
+            document.getElementById('dataInfo').style.display = 'block';
+            
+            // Show filters and charts
+            document.getElementById('filters').style.display = 'flex';
+            document.getElementById('seniorChartRow').style.display = 'flex';
+            document.getElementById('comparisonChartRow').style.display = 'flex';
+            document.getElementById('dataSummary').style.display = 'block';
+            
+            // Populate senior filter dropdown
+            const uniqueSeniors = [...new Set(reactions.map(r => r.senior))];
+            const seniorFilter = document.getElementById('seniorFilter');
+            
+            // Clear existing options except "All"
+            while (seniorFilter.children.length > 1) {
+                seniorFilter.removeChild(seniorFilter.lastChild);
+            }
+            
+            uniqueSeniors.forEach(senior => {
+                const option = document.createElement('option');
+                option.value = senior;
+                option.textContent = senior;
+                seniorFilter.appendChild(option);
+            });
+            
+            // Set default date range to cover all data
+            const allDates = [
+                ...reactions.map(r => new Date(r.time)),
+                ...messages.map(m => new Date(m.time))
+            ];
+            const minDate = new Date(Math.min(...allDates));
+            const maxDate = new Date(Math.max(...allDates));
+            
+            document.getElementById('startDate').valueAsDate = minDate;
+            document.getElementById('endDate').valueAsDate = maxDate;
+            
+            // Process initial data
+            const filters = {
+                startDate: minDate.toISOString().split('T')[0],
+                endDate: maxDate.toISOString().split('T')[0],
+                senior: 'all',
+                timeRange: 'all'
+            };
+            
+            const processedData = processData(reactions, messages, filters);
+            updateCharts(processedData);
+            
+            // Add event listeners for filters
+            const filterInputs = ['startDate', 'endDate', 'seniorFilter', 'timeRange'];
+            filterInputs.forEach(id => {
+                document.getElementById(id).addEventListener('change', () => {
+                    const filters = {
+                        startDate: document.getElementById('startDate').value,
+                        endDate: document.getElementById('endDate').value,
+                        senior: document.getElementById('seniorFilter').value,
+                        timeRange: document.getElementById('timeRange').value
+                    };
+                    
+                    const processedData = processData(reactions, messages, filters);
+                    updateCharts(processedData);
+                });
+            });
+        };
+
+        // Handle file upload
+        document.getElementById('uploadBtn').addEventListener('click', () => {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select an Excel file to upload.');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                parseExcel(data);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Initialize charts when the page loads
+        window.addEventListener('DOMContentLoaded', initCharts);
+    </script>
+</body>
+</html>
